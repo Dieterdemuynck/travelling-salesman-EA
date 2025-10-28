@@ -7,7 +7,6 @@ class r0123456:
 	def __init__(self):
 		self.reporter = Reporter.Reporter(self.__class__.__name__)
 
-	#Promt: I want to implement k-tournament selection for my evolutionary algorithm. Please do this by implementing a method, 'tournament_selection'. this method recieves a Numpy array, containing Numpy arrays, which represent paths in a traveling salesman problem. Each of these paths are permutations of indices in a distance matrix. the second argument is the evaluation method, which takes a path and returns a floating point number. this number represents the score of a given path. the third argument is another numpy arrays of numpy arrays, with k paths. These are filled with the found solutions after the tournament. make sure that after the function call, this argument is updated with the new solutions. 
 	# k-tournament selection: fills `winners` (in-place) with selected solutions.
 	def tournament_selection(self, population, evaluate, winners, k=3):
 		"""
@@ -44,6 +43,78 @@ class r0123456:
 			win = np.array(population[best_idx], copy=True)
 			# If winners is a numpy array of object dtype, assignment works; if it's a list, it also works.
 			winners[i] = win
+
+
+	# --- Mutation operators for permutations (TSP) ---
+
+    # Scramble mutation: selects a subsequence and shuffles it.
+	def scramble_mutation(self, solution, distanceMatrix):
+		"""
+		Parameters:
+		solution : numpy.ndarray (1D permutation)
+		distanceMatrix : 2D numpy.ndarray with distances; invalid edges are np.inf
+		Returns:
+		mutated solution (numpy.ndarray). If no valid mutation found, returns a copy of the original.
+		"""
+		n = solution.size
+		if n <= 1:
+			return np.array(solution, copy=True)
+		rng = np.random.default_rng()
+		def is_valid(path):
+		# check all consecutive edges including return to start
+			for i in range(n):
+				a = path[i]
+				b = path[(i+1) % n]
+				if not np.isfinite(distanceMatrix[a, b]):
+					return False
+				return True
+		# Try a number of random scramble attempts; if none valid, return original
+		attempts = 20
+		orig = np.array(solution, copy=True)
+		for _ in range(attempts):
+			i, j = sorted(rng.choice(n, size=2, replace=False))
+			if i == j:
+				continue
+			sub = orig[i:j+1].copy()
+			rng.shuffle(sub)
+			cand = orig.copy()
+			cand[i:j+1] = sub
+			if is_valid(cand):
+				return cand
+		return orig
+
+	# Inversion mutation: selects a subsequence and reverses it.
+	def inversion_mutation(self, solution, distanceMatrix):
+		"""
+		Parameters:
+		solution : numpy.ndarray (1D permutation)
+		distanceMatrix : 2D numpy.ndarray with distances; invalid edges are np.inf
+		Returns:
+		mutated solution (numpy.ndarray). If no valid mutation found, returns a copy of the original.
+		"""
+		n = solution.size
+		if n <= 1:
+			return np.array(solution, copy=True)
+		rng = np.random.default_rng()
+		def is_valid(path):
+			for i in range(n):
+				a = path[i]
+				b = path[(i+1) % n]
+				if not np.isfinite(distanceMatrix[a, b]):
+					return False
+			return True
+		attempts = 20
+		orig = np.array(solution, copy=True)
+		for _ in range(attempts):
+			i, j = sorted(rng.choice(n, size=2, replace=False))
+			if i == j:
+				continue
+			cand = orig.copy()
+			cand[i:j+1] = cand[i:j+1][::-1]
+			if is_valid(cand):
+				return cand
+		return orig
+
 
 
 	# The evolutionary algorithm's main loop
