@@ -187,3 +187,30 @@ class TestEvolutionaryAlgorithm(unittest.TestCase):
 		# next choice due to invalid path = i = 0, j = 7
 		solution = EA.scramble_mutation(np.array([i for i in range(amt_nodes)]), distance_matrix)
 		self.assertTrue(all(solution == np.array([6, 2, 7, 4, 5, 1, 0, 3])), "The solutions must be equal!")
+
+	def test_tournament_selection(self):
+		EA = r0123456(seed=0)
+		amt_nodes = 3
+		amt_candidates = 10
+		k = 3
+		# generate random permutations.
+
+		current_perm = [i for i in range(amt_nodes)]
+		perms = np.array([current_perm])
+		for i in range(amt_candidates):
+			current_perm = EA.rng.permutation(current_perm)
+			perms = np.append(perms, [current_perm], axis=0)
+
+		def eval(path, distance_matrix = np.array([[1,2,3], [3,2,1], [2,3,1]])):
+			fitness = 0.
+			for i in range(len(path)):
+				a = path[i]
+				b = path[(i+1)%len(path)]
+				fitness += distance_matrix[a,b]
+			return fitness
+
+
+		winners = [0] * k
+		EA.tournament_selection(population=perms, evaluate=eval, k=k, winners=winners)
+		self.assertTrue([all(i == j) for i,j in zip(np.array([[0, 1, 2], [0, 1, 2], [1, 2, 0]]), winners)])
+
