@@ -70,7 +70,7 @@ class r0123456:
 				b = path[(i+1) % n]
 				if not np.isfinite(distanceMatrix[a, b]):
 					return False
-				return True
+			return True
 		# Try a number of random scramble attempts; if none valid, return original
 		attempts = 20
 		orig = np.array(solution, copy=True)
@@ -167,3 +167,23 @@ class TestEvolutionaryAlgorithm(unittest.TestCase):
 		# next choice due to invalid path = i = 1, j = 2
 		solution = EA.inversion_mutation(np.array([i for i in range(amt_nodes)]), distance_matrix)
 		self.assertTrue(all(solution == np.array([0,2,1,3,4,5,6,7])), "The solutions must be equal!")
+
+	def test_scramble_operator(self):
+		# seed == 0 -> i = 5, j = 7
+		EA = r0123456(seed=0)
+		amt_nodes = 8
+		distance_matrix = np.array([[1.] * amt_nodes ] * amt_nodes)
+
+		solution = EA.scramble_mutation(np.array([i for i in range(amt_nodes)]), distance_matrix)
+		self.assertTrue(all(solution == np.array([0,1,2,3,4,6,7,5])), "The solutions must be equal!")
+
+	def test_scramble_operator_but_inf_dist_once(self):
+		EA = r0123456(seed=0)
+		amt_nodes = 8
+		distance_matrix = np.array([[1.] * amt_nodes ] * amt_nodes)
+		# there is no link from 4 to 6.
+		distance_matrix[4,6] = np.inf 
+
+		# next choice due to invalid path = i = 0, j = 7
+		solution = EA.scramble_mutation(np.array([i for i in range(amt_nodes)]), distance_matrix)
+		self.assertTrue(all(solution == np.array([6, 2, 7, 4, 5, 1, 0, 3])), "The solutions must be equal!")
