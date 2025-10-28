@@ -1,11 +1,16 @@
 import Reporter
+import unittest
 import numpy as np
 
 # Modify the class name to match your student number.
 class r0123456:
 
-	def __init__(self):
+	def __init__(self, seed = None):
 		self.reporter = Reporter.Reporter(self.__class__.__name__)
+		if seed is not None:
+			self.rng = np.random.default_rng(seed)
+		else:
+			self.rng = np.random.default_rng()
 
 	# k-tournament selection: fills `winners` (in-place) with selected solutions.
 	def tournament_selection(self, population, evaluate, winners, k=3):
@@ -25,12 +30,11 @@ class r0123456:
 			return
 		if k <= 0:
 			raise ValueError("k must be >= 1")
-		rng = np.random.default_rng()
 		# Accept winners as numpy array or list-like; update in-place.
 		for i in range(len(winners)):
 			# choose k distinct competitors (or all if k >= pop_size)
 			num_competitors = min(k, pop_size)
-			indices = rng.choice(pop_size, size=num_competitors, replace=False)
+			indices = self.rng.choice(pop_size, size=num_competitors, replace=False)
 			best_idx = None
 			best_score = None
 			for idx in indices:
@@ -59,7 +63,6 @@ class r0123456:
 		n = solution.size
 		if n <= 1:
 			return np.array(solution, copy=True)
-		rng = np.random.default_rng()
 		def is_valid(path):
 		# check all consecutive edges including return to start
 			for i in range(n):
@@ -72,11 +75,11 @@ class r0123456:
 		attempts = 20
 		orig = np.array(solution, copy=True)
 		for _ in range(attempts):
-			i, j = sorted(rng.choice(n, size=2, replace=False))
+			i, j = sorted(self.rng.choice(n, size=2, replace=False))
 			if i == j:
 				continue
 			sub = orig[i:j+1].copy()
-			rng.shuffle(sub)
+			self.rng.shuffle(sub)
 			cand = orig.copy()
 			cand[i:j+1] = sub
 			if is_valid(cand):
@@ -95,7 +98,6 @@ class r0123456:
 		n = solution.size
 		if n <= 1:
 			return np.array(solution, copy=True)
-		rng = np.random.default_rng()
 		def is_valid(path):
 			for i in range(n):
 				a = path[i]
@@ -106,7 +108,7 @@ class r0123456:
 		attempts = 20
 		orig = np.array(solution, copy=True)
 		for _ in range(attempts):
-			i, j = sorted(rng.choice(n, size=2, replace=False))
+			i, j = sorted(self.rng.choice(n, size=2, replace=False))
 			if i == j:
 				continue
 			cand = orig.copy()
@@ -144,3 +146,24 @@ class r0123456:
 
 		# Your code here.
 		return 0
+
+class TestEvolutionaryAlgorithm(unittest.TestCase):
+	def test_inversion_operator(self):
+		# seed == 0 -> i = 5, j = 7
+		EA = r0123456(seed=0)
+		amt_nodes = 8
+		distance_matrix = np.array([[1.] * amt_nodes ] * amt_nodes)
+
+		solution = EA.inversion_mutation(np.array([i for i in range(amt_nodes)]), distance_matrix)
+		self.assertTrue(all(solution == np.array([0,1,2,3,4,7,6,5])), "The solutions must be equal!")
+		
+	def test_inversion_operator_but_inf_dist_once(self):
+		EA = r0123456(seed=0)
+		amt_nodes = 8
+		distance_matrix = np.array([[1.] * amt_nodes ] * amt_nodes)
+		# there is no link from 4 to 7.
+		distance_matrix[4,7] = np.inf 
+
+		# next choice due to invalid path = i = 1, j = 2
+		solution = EA.inversion_mutation(np.array([i for i in range(amt_nodes)]), distance_matrix)
+		self.assertTrue(all(solution == np.array([0,2,1,3,4,5,6,7])), "The solutions must be equal!")
