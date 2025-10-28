@@ -159,15 +159,13 @@ class r0123456:
 			edge[a].update((b,c))
 		return edge
 
-	@staticmethod
-	def edge_recombination(parent1, parent2, rng=None):
+	def edge_recombination(self, parent1, parent2):
 		"""
 		Edge Recombination crossover producing one offspring from two parents.
 		Implementation follows the standard ER: build adjacency from both parents,
 		start from a random city, repeatedly choose next city among current's neighbors
 		with minimal adjacency list size; if empty pick random remaining city.
 		"""
-		rng = np.random.default_rng() if rng is None else rng
 		n = parent1.size
 		# Build combined adjacency lists
 		adj = [set() for _ in range(n)]
@@ -179,7 +177,7 @@ class r0123456:
 		remaining = set(range(n))
 		offspring = []
 		# start city: prefer parents' first city or random
-		start = int(rng.choice(parent1))  # pick a city from parent1 at random
+		start = int(self.rng.choice(parent1))  # pick a city from parent1 at random
 		current = start
 
 		while remaining:
@@ -197,16 +195,16 @@ class r0123456:
 					sizes = [len(adj[c]) for c in cand]
 					min_size = min(sizes)
 					min_cands = [c for c, sz in zip(cand, sizes) if sz == min_size]
-					current = int(rng.choice(min_cands))
+					current = int(self.rng.choice(min_cands))
 				else:
 					# no neighbors left, choose uniformly from remaining
-					current = int(rng.choice(list(remaining)))
+					current = int(self.rng.choice(list(remaining)))
 		return np.array(offspring, dtype=int)
 
-	def pmx(parent1, parent2):
+	def pmx(self, parent1, parent2):
 		size = len(parent1)
 		# Step 1: Choose two random crossover points
-		cx1, cx2 = sorted(np.random.sample(range(size), 2))
+		cx1, cx2 = sorted(self.rng.sample(range(size), 2))
 
 		def create_offspring(p1, p2):
 			offspring = [None] * size
@@ -249,8 +247,6 @@ class r0123456:
 		distanceMatrix = np.loadtxt(file, delimiter=",")
 		file.close()
 
-		rng = np.random.default_rng()
-
 		n_cities = distanceMatrix.shape[0]
 		pop_size = 50
 		max_iters = 10000
@@ -289,12 +285,12 @@ class r0123456:
 
 			for i in range(1, pop_size):
 				# select two parents uniformly at random (without replacement)
-				i1, i2 = rng.choice(pop_size, size=2, replace=False)
+				i1, i2 = self.rng.choice(pop_size, size=2, replace=False)
 				p1 = pop[i1]
 				p2 = pop[i2]
 
 				# produce one or two children (we produce one here)
-				child = r0123456.edge_recombination(p1, p2, rng=rng)
+				child = r0123456.edge_recombination(p1, p2)
 				# TODO: Mutation
 				# optional small mutation: swap two non-first positions with tiny prob
 				# if rng.random() < 0.05:
