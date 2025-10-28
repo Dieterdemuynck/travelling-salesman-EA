@@ -1,3 +1,8 @@
+Dries:
+K-tournament promt: I want to implement k-tournament selection for my evolutionary algorithm. Please do this by implementing a method, 'tournament_selection'. this method recieves a Numpy array, containing Numpy arrays, which represent paths in a traveling salesman problem. Each of these paths are permutations of indices in a distance matrix. the second argument is the evaluation method, which takes a path and returns a floating point number. this number represents the score of a given path. the third argument is another numpy arrays of numpy arrays, with k paths. These are filled with the found solutions after the tournament. make sure that after the function call, this argument is updated with the new solutions. 
+Mutation operator promt: I'm implementing an evolutionary algorithm and am currently implementing mutation operators. The problem is a traveling salesman problem, so solutions are permutations of cities. I want to use scramble mutation and inversion mutation. Can you make a function for each operator? the parameters are a given solution, which has the type of a numpy array. the second argument is the distance matrix. we pass this argument because we need to check if the mutated solution is still a valid circuit. A path exists if the distance is not infinite. the function returns the mutated solution. please keep the other code intact. Thank you
+
+Dieter: 
 Prompt 0:
 Files: r012456.py edge_recombination_operator.pdf
 Prompt: We want to implement a solution to the travelling salesman problem using Edge Recombination (ER). In the given python file, a distance matrix is given between the nodes. How would we best keep track of the routes in a population?
