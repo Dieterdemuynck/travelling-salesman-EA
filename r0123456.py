@@ -91,6 +91,45 @@ class r0123456:
 					current = int(rng.choice(list(remaining)))
 		return np.array(offspring, dtype=int)
 
+	def pmx(parent1, parent2):
+		size = len(parent1)
+		# Step 1: Choose two random crossover points
+		cx1, cx2 = sorted(np.random.sample(range(size), 2))
+
+		def create_offspring(p1, p2):
+			offspring = [None] * size
+
+			# Step 1: Copy the crossover segment from p1
+			offspring[cx1:cx2] = p1[cx1:cx2]
+
+			# Step 2: Handle elements in the crossover segment of p2 not yet in offspring
+			for i in range(cx1, cx2):
+				elem = p2[i]
+				if elem not in offspring:
+					pos = i
+					while True:
+						# Step 3: Find what element j was copied from p1 at this position
+						j = p1[pos]
+						# Step 4: Find where j is in p2
+						pos = p2.index(j)
+						# Step 5: If that position is empty, place elem there
+						if offspring[pos] is None:
+							offspring[pos] = elem
+							break
+
+			# Step 6: Fill remaining positions from p2
+			for i in range(size):
+				if offspring[i] is None:
+					offspring[i] = p2[i]
+
+			return offspring
+
+		# Create both offspring
+		child1 = create_offspring(parent1, parent2)
+		child2 = create_offspring(parent2, parent1)
+
+		return child1, child2
+
 	# The evolutionary algorithm's main loop
 	def optimize(self, filename):
 		# Read distance matrix from file.		
