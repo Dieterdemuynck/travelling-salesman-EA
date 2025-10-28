@@ -8,13 +8,53 @@ class r0123456:
 		self.reporter = Reporter.Reporter(self.__class__.__name__)
 
 	@staticmethod
-	def init_population(pop_size, n_cities, rng=None):
+	def init_population(pop_size, n_cities, dist=None, rng=None):
+		"""
+		Initialize a population of permutations (routes).
+
+		If a distance matrix `dist` is provided, only accept permutations where
+		every consecutive link (including return to start) has a finite distance.
+		A link is considered valid if its distance is finite (not infinite).
+
+		Parameters:
+		- pop_size: number of individuals
+		- n_cities: number of cities (permutation length)
+		- dist: optional 2D distance matrix used to validate links
+		- rng: optional numpy random generator
+
+		Returns:
+		- pop: (pop_size, n_cities) array of permutations
+		"""
 		rng = np.random.default_rng() if rng is None else rng
 		pop = np.empty((pop_size, n_cities), dtype=int)
 		base = np.arange(n_cities, dtype=int)
-		# TODO: fixate first node, perhaps?
+		# For each individual, try random permutations until a valid route is found
+		# (if dist is provided). To avoid infinite loops, we cap attempts and
+		# accept the last candidate if no fully valid route is found after many tries.
+		max_attempts = 10000
 		for i in range(pop_size):
-			pop[i] = rng.permutation(base)
+			attempts = 0
+			while True:
+				attempts += 1
+				cand = rng.permutation(base)
+				# If no distance matrix provided, accept immediately
+				if dist is None:
+					pop[i] = cand
+					break
+				# Validate every consecutive link including return to start
+				idx_from = cand
+				idx_to = np.roll(cand, -1)
+				# valid if all distances for links are finite
+				try:
+					valid = np.isfinite(dist[idx_from, idx_to]).all()
+				except Exception:
+					# If indexing fails for some reason, treat as invalid and continue
+					valid = False
+
+				if valid or attempts >= max_attempts:
+					# accept (either valid or we've reached attempt cap)
+					pop[i] = cand
+					break
 		return pop
 
 	@staticmethod
@@ -104,7 +144,8 @@ class r0123456:
 		pop_size = 50
 		max_iters = 10000
 
-		pop = r0123456.init_population(pop_size, n_cities)
+		# Pass distanceMatrix to init_population so routes can be validated
+		pop = r0123456.init_population(pop_size, n_cities, dist=distanceMatrix, rng=rng)
 		fitness = r0123456.evaluate_population(pop, distanceMatrix)
 
 		it = 0
