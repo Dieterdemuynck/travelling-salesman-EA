@@ -1,2 +1,237 @@
+Dries:
 K-tournament promt: I want to implement k-tournament selection for my evolutionary algorithm. Please do this by implementing a method, 'tournament_selection'. this method recieves a Numpy array, containing Numpy arrays, which represent paths in a traveling salesman problem. Each of these paths are permutations of indices in a distance matrix. the second argument is the evaluation method, which takes a path and returns a floating point number. this number represents the score of a given path. the third argument is another numpy arrays of numpy arrays, with k paths. These are filled with the found solutions after the tournament. make sure that after the function call, this argument is updated with the new solutions. 
 Mutation operator promt: I'm implementing an evolutionary algorithm and am currently implementing mutation operators. The problem is a traveling salesman problem, so solutions are permutations of cities. I want to use scramble mutation and inversion mutation. Can you make a function for each operator? the parameters are a given solution, which has the type of a numpy array. the second argument is the distance matrix. we pass this argument because we need to check if the mutated solution is still a valid circuit. A path exists if the distance is not infinite. the function returns the mutated solution. please keep the other code intact. Thank you
+
+Dieter: 
+Prompt 0:
+Files: r012456.py edge_recombination_operator.pdf
+Prompt: We want to implement a solution to the travelling salesman problem using Edge Recombination (ER). In the given python file, a distance matrix is given between the nodes. How would we best keep track of the routes in a population?
+Output: 
+Use a permutation representation and simple auxiliary arrays for fast evaluation and ER-specific data.
+
+Summary
+
+Represent each route as a 1D numpy array (dtype=int) containing a permutation of city indices 0..n-1.
+Represent the population as a 2D numpy array shape (pop_size, n) dtype=int.
+Keep a 1D float array of fitness (tour length) for the population so you don't recompute unnecessarily.
+For the Edge Recombination operator build adjacency lists for the two parents on-demand as Python lists of sets (easy removal operations).
+Optionally store each route in a canonical rotation (e.g. start at city 0 or smallest city index) to make comparisons / caching easier.
+Minimal example code
+```
+# python
+import numpy as np
+
+def init_population(pop_size, n_cities, rng=None):
+    rng = np.random.default_rng() if rng is None else rng
+    pop = np.empty((pop_size, n_cities), dtype=int)
+    base = np.arange(n_cities, dtype=int)
+    for i in range(pop_size):
+        pop[i] = rng.permutation(base)
+    return pop
+
+def tour_length(route, dist):
+    # route: 1D array of city indices, dist: 2D distance matrix
+    # include return to start
+    idx_from = route
+    idx_to   = np.roll(route, -1)
+    return dist[idx_from, idx_to].sum()
+
+def evaluate_population(pop, dist):
+    # pop: (pop_size, n_cities)
+    n = pop.shape[0]
+    fitness = np.empty(n, dtype=float)
+    for i in range(n):
+        fitness[i] = tour_length(pop[i], dist)
+    return fitness
+
+def build_edge_map(parent):
+    # parent: 1D permutation -> list of neighbor sets
+    n = parent.size
+    edge = [set() for _ in range(n)]
+    for i in range(n):
+        a = parent[i]
+        b = parent[(i-1)%n]
+        c = parent[(i+1)%n]
+        edge[a].update((b,c))
+    return edge
+
+# Example usage:
+# pop = init_population(50, n_cities)
+# fitness = evaluate_population(pop, distance_matrix)
+# edges = build_edge_map(pop[0])   # for ER operator between two parents build for both
+```
+This representation is compact, fast to iterate/evaluate with numpy, and makes Edge Recombination straightforward because adjacency sets are easy to update during construction.
+
+
+
+Prompt1:
+Files: r0123456.py
+Prompt: Add the edge recombination crossover algorithm as described before to this file.
+Output:
+```py
+# ...existing code...
+import Reporter
+import numpy as np
+
+# Modify the class name to match your student number.
+class r0123456:
+
+    def __init__(self):
+        self.reporter = Reporter.Reporter(self.__class__.__name__)
+
+    @staticmethod
+    def init_population(pop_size, n_cities, rng=None, fix_first=True):
+        """
+        Return a (pop_size, n_cities) int numpy array where each row is a permutation.
+        If fix_first is True the first city (0) is fixed at position 0 in every individual.
+        """
+        rng = np.random.default_rng() if rng is None else rng
+        pop = np.empty((pop_size, n_cities), dtype=int)
+        base = np.arange(n_cities, dtype=int)
+        if fix_first:
+            rest = base[1:]
+            for i in range(pop_size):
+                perm = rng.permutation(rest)
+                row = np.empty(n_cities, dtype=int)
+                row[0] = 0
+                row[1:] = perm
+                pop[i] = row
+        else:
+            for i in range(pop_size):
+                pop[i] = rng.permutation(base)
+        return pop
+
+    @staticmethod
+    def tour_length(route, dist):
+        # route: 1D array of city indices, dist: 2D distance matrix
+        # include return to start
+        idx_from = route
+        idx_to = np.roll(route, -1)
+        return dist[idx_from, idx_to].sum()
+
+    @staticmethod
+    def evaluate_population(pop, dist):
+        # pop: (pop_size, n_cities)
+        n = pop.shape[0]
+        fitness = np.empty(n, dtype=float)
+        for i in range(n):
+            fitness[i] = r0123456.tour_length(pop[i], dist)
+        return fitness
+
+    @staticmethod
+    def build_edge_map(parent):
+        """
+        Build adjacency sets for each city from a single parent permutation.
+        Returns a list of sets indexed by city id.
+        """
+        n = parent.size
+        edge = [set() for _ in range(n)]
+        for i in range(n):
+            a = int(parent[i])
+            b = int(parent[(i - 1) % n])
+            c = int(parent[(i + 1) % n])
+            edge[a].update((b, c))
+        return edge
+
+    @staticmethod
+    def edge_recombination(parent1, parent2, rng=None):
+        """
+        Edge Recombination crossover producing one offspring from two parents.
+        Implementation follows the standard ER: build adjacency from both parents,
+        start from a random city, repeatedly choose next city among current's neighbors
+        with minimal adjacency list size; if empty pick random remaining city.
+        """
+        rng = np.random.default_rng() if rng is None else rng
+        n = parent1.size
+        # Build combined adjacency lists
+        adj = [set() for _ in range(n)]
+        e1 = r0123456.build_edge_map(parent1)
+        e2 = r0123456.build_edge_map(parent2)
+        for i in range(n):
+            adj[i] = set(e1[i]) | set(e2[i])
+
+        remaining = set(range(n))
+        offspring = []
+        # start city: prefer parents' first city or random
+        start = int(rng.choice(parent1))  # pick a city from parent1 at random
+        current = start
+
+        while remaining:
+            offspring.append(current)
+            remaining.remove(current)
+            # remove current from all adjacency lists
+            for s in adj:
+                s.discard(current)
+            # choose next
+            if remaining:
+                neigh = adj[current] & remaining
+                if neigh:
+                    # choose neighbor with smallest adjacency size (tie break randomly)
+                    cand = list(neigh)
+                    sizes = [len(adj[c]) for c in cand]
+                    min_size = min(sizes)
+                    min_cands = [c for c, sz in zip(cand, sizes) if sz == min_size]
+                    current = int(rng.choice(min_cands))
+                else:
+                    # no neighbors left, choose uniformly from remaining
+                    current = int(rng.choice(list(remaining)))
+        return np.array(offspring, dtype=int)
+
+    # The evolutionary algorithm's main loop
+    def optimize(self, filename):
+        # Read distance matrix from file.
+        file = open(filename)
+        distanceMatrix = np.loadtxt(file, delimiter=",")
+        file.close()
+
+        rng = np.random.default_rng()
+
+        n_cities = distanceMatrix.shape[0]
+        pop_size = 50
+        max_iters = 10000
+
+        # initialize population (fix first city to 0 to remove symmetric rotations)
+        pop = r0123456.init_population(pop_size, n_cities, rng=rng, fix_first=True)
+        fitness = r0123456.evaluate_population(pop, distanceMatrix)
+
+        it = 0
+        while True:
+            # compute statistics
+            meanObjective = float(fitness.mean())
+            best_idx = int(fitness.argmin())
+            bestObjective = float(fitness[best_idx])
+            bestSolution = pop[best_idx].copy()
+
+            # report and check time
+            timeLeft = self.reporter.report(meanObjective, bestObjective, bestSolution)
+            if timeLeft < 0:
+                break
+            # simple stopping criterion to avoid infinite loops during testing
+            it += 1
+            if it >= max_iters:
+                break
+
+            # Generate new population via ER crossover (steady-state / generational mix)
+            new_pop = []
+            # elitism: keep best individual
+            new_pop.append(pop[best_idx].copy())
+
+            while len(new_pop) < pop_size:
+                # select two parents uniformly at random (without replacement)
+                i1, i2 = rng.choice(pop_size, size=2, replace=False)
+                p1 = pop[i1]
+                p2 = pop[i2]
+                # produce one or two children (we produce one here)
+                child = r0123456.edge_recombination(p1, p2, rng=rng)
+                # optional small mutation: swap two non-first positions with tiny prob
+                if rng.random() < 0.05:
+                    a = rng.integers(1, n_cities)  # avoid position 0 if fixed
+                    b = rng.integers(1, n_cities)
+                    child[a], child[b] = child[b], child[a]
+                new_pop.append(child)
+            pop = np.vstack(new_pop[:pop_size])
+            fitness = r0123456.evaluate_population(pop, distanceMatrix)
+
+        return 0
+# ...existing code...
+```
