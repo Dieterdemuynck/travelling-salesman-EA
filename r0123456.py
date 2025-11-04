@@ -458,6 +458,10 @@ class r0123456:
                         child = _pmx_crossover(pop[p1_idx], pop[p2_idx], self.rng_state)
                     else:
                         child = pop[p1_idx].copy()
+                    
+                    # Repair invalid paths after crossover
+                    if not _is_valid_path(child, distanceMatrix):
+                        child = _repair_path(child, distanceMatrix)
 
                     # Mutation (in-place when possible)
                     if np.random.random() < self.mutation_rate:
@@ -469,6 +473,9 @@ class r0123456:
                             child = _inversion_mutation(
                                 child, distanceMatrix, self.rng_state
                             )
+                        # Repair if mutation created an invalid path
+                        if not _is_valid_path(child, distanceMatrix):
+                            child = _repair_path(child, distanceMatrix)
 
                     new_pop[i + j] = child
 

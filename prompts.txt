@@ -247,3 +247,7 @@ Prompt: This may, by random chance, spend a long time looking for valid paths. P
 Prompt to repair a path in place
 Files: r0123456.py
 Prompt: this method copies the path to then repair and return the copy. If the input is unused after calling the input, wouldn't it be faster to simply repair in place?
+
+Prompt to fix infinity mean
+Files: r0123456.py
+Prompt: Somewhere in the code, invalid paths get generated. I notice this because the mean objective value is often but not always inf when I run the code. Do you see where this happens?
