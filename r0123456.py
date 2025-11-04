@@ -227,10 +227,12 @@ def _repair_path(path: np.ndarray, distanceMatrix: np.ndarray) -> np.ndarray:
                 next_j = (j + 1) % n
                 
                 # Test if swap would be valid
-                if (np.isfinite(distanceMatrix[path[prev_i], path[j]]) and
-                    np.isfinite(distanceMatrix[path[j], path[next_idx]]) and
-                    np.isfinite(distanceMatrix[path[(j-1)%n], path[i]]) and
-                    np.isfinite(distanceMatrix[path[i], path[next_j]])):
+                if (
+                    np.isfinite(distanceMatrix[path[prev_i], path[j]])
+                    and np.isfinite(distanceMatrix[path[j], path[next_idx]])
+                    and np.isfinite(distanceMatrix[path[(j - 1) % n], path[i]])
+                    and np.isfinite(distanceMatrix[path[i], path[next_j]])
+                ):
                     # Perform the swap in place
                     path[i], path[j] = path[j], path[i]
                     break
@@ -247,19 +249,31 @@ def _contains(arr: np.ndarray, val: int) -> bool:
 
 @njit(cache=True)
 def _pmx_crossover(
-    parent1: np.ndarray, parent2: np.ndarray, rng_state: np.ndarray
+    parent1: np.ndarray,
+    parent2: np.ndarray,
+    rng_state: np.ndarray,
+    exploitation_rate: float = -1.0,
 ) -> np.ndarray:
-    """Partially Mapped Crossover (PMX) with Numba optimization"""
+    """Partially Mapped Crossover (PMX) with Numba optimization and exploitation rate control"""
     size = len(parent1)
 
-    # Choose crossover points
-    cx1 = int(np.random.random() * (size - 1))
-    cx2 = cx1 + 1 + int(np.random.random() * (size - cx1 - 1))
+    # Step 1: Choose crossover points based on exploitation_rate
+    if exploitation_rate == -1.0:
+        # Random segment size when no exploitation rate specified
+        cx1 = int(np.random.random() * (size - 1))
+        cx2 = cx1 + 1 + int(np.random.random() * (size - cx1 - 1))
+    else:
+        # Clamp exploitation_rate between 0 and 1
+        exploitation_rate = max(0.0, min(1.0, exploitation_rate))
+        # Calculate segment length based on exploitation rate
+        segment_length = int((1 - exploitation_rate) * (size - 1)) + 1
+        cx1 = int(np.random.random() * (size - segment_length))
+        cx2 = cx1 + segment_length
 
     # Initialize offspring with sentinel value (-1)
     offspring = np.full(size, -1, dtype=np.int32)
 
-    # Step 1: Copy the crossover segment from parent1
+    # Step 2: Copy the crossover segment from parent1
     offspring[cx1:cx2] = parent1[cx1:cx2]
 
     # Create mapping for faster lookups
@@ -267,7 +281,7 @@ def _pmx_crossover(
     for i in range(size):
         pos_map[parent2[i]] = i
 
-    # Step 2 & 3: Handle the crossover segment mapping
+    # Step 3: Handle the crossover segment mapping
     for i in range(cx1, cx2):
         elem = parent2[i]
         if elem not in offspring[cx1:cx2]:
@@ -367,7 +381,9 @@ class r0123456:
 
     @staticmethod
     @jit
-    def init_population(pop_size: int, n_cities: int, distanceMatrix: np.ndarray) -> np.ndarray:
+    def init_population(
+        pop_size: int, n_cities: int, distanceMatrix: np.ndarray
+    ) -> np.ndarray:
         pop = np.empty((pop_size, n_cities), dtype=np.int32)
         base = np.arange(n_cities, dtype=np.int32)
 
