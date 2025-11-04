@@ -209,6 +209,34 @@ def _edge_recombination(
 
 
 @njit(cache=True)
+def _repair_path(path: np.ndarray, distanceMatrix: np.ndarray) -> np.ndarray:
+    """Repair an invalid path by swapping cities until it becomes valid. Modifies path in-place."""
+    n = len(path)
+    
+    # For each position, if the connection to next city is invalid,
+    # find a valid swap partner
+    for i in range(n):
+        next_idx = (i + 1) % n
+        # If this connection is invalid
+        if not np.isfinite(distanceMatrix[path[i], path[next_idx]]):
+            # Try to swap with each subsequent position until we find a valid connection
+            for j in range(next_idx + 1, n + next_idx):
+                j = j % n
+                # Check if swapping would create valid connections
+                prev_i = (i - 1) % n
+                next_j = (j + 1) % n
+                
+                # Test if swap would be valid
+                if (np.isfinite(distanceMatrix[path[prev_i], path[j]]) and
+                    np.isfinite(distanceMatrix[path[j], path[next_idx]]) and
+                    np.isfinite(distanceMatrix[path[(j-1)%n], path[i]]) and
+                    np.isfinite(distanceMatrix[path[i], path[next_j]])):
+                    # Perform the swap in place
+                    path[i], path[j] = path[j], path[i]
+                    break
+    return path
+
+@njit(cache=True)
 def _contains(arr: np.ndarray, val: int) -> bool:
     """Fast check for value in small array"""
     for x in arr:
@@ -339,12 +367,16 @@ class r0123456:
 
     @staticmethod
     @jit
-    def init_population(pop_size: int, n_cities: int) -> np.ndarray:
+    def init_population(pop_size: int, n_cities: int, distanceMatrix: np.ndarray) -> np.ndarray:
         pop = np.empty((pop_size, n_cities), dtype=np.int32)
         base = np.arange(n_cities, dtype=np.int32)
 
         for i in range(pop_size):
-            pop[i] = np.random.permutation(base)
+            # Generate random permutation and repair if needed
+            candidate = np.random.permutation(base)
+            if not _is_valid_path(candidate, distanceMatrix):
+                candidate = _repair_path(candidate, distanceMatrix)
+            pop[i] = candidate
         return pop
 
     def optimize(self, filename: str) -> float:
@@ -355,7 +387,7 @@ class r0123456:
         max_iters = 10000
 
         # Initialize population and evaluate
-        pop = self.init_population(pop_size, n_cities)
+        pop = self.init_population(pop_size, n_cities, distanceMatrix)
         fitness = _evaluate_population(pop, distanceMatrix)
 
         # Pre-allocate arrays for efficiency
@@ -370,7 +402,7 @@ class r0123456:
         while True:
             # Compute statistics once
             meanObjective = float(fitness.mean())
-            print(meanObjective)
+            # print(meanObjective)
             best_idx = int(fitness.argmin())
             bestObjective = float(fitness[best_idx])
 

@@ -235,3 +235,15 @@ class r0123456:
         return 0
 # ...existing code...
 ```
+
+Prompt to fix init population validity
+Files: r0123456.py
+Prompt: This method creates an initial population. However, not all cities are connected, indicated by float.inf. How can I "fix" a generated permutation such that no infinities are selected?
+
+Prompt to find a more efficient solution to fix init population, rather than generating a new random route.
+Files: r0123456.py
+Prompt: This may, by random chance, spend a long time looking for valid paths. Perhaps there's a faster way, i.e. to fix an invalid path instead?
+
+Prompt to repair a path in place
+Files: r0123456.py
+Prompt: this method copies the path to then repair and return the copy. If the input is unused after calling the input, wouldn't it be faster to simply repair in place?
