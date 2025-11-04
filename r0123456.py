@@ -218,6 +218,51 @@ def _contains(arr: np.ndarray, val: int) -> bool:
 
 
 @njit(cache=True)
+def _pmx_crossover(
+    parent1: np.ndarray, parent2: np.ndarray, rng_state: np.ndarray
+) -> np.ndarray:
+    """Partially Mapped Crossover (PMX) with Numba optimization"""
+    size = len(parent1)
+
+    # Choose crossover points
+    cx1 = int(np.random.random() * (size - 1))
+    cx2 = cx1 + 1 + int(np.random.random() * (size - cx1 - 1))
+
+    # Initialize offspring with sentinel value (-1)
+    offspring = np.full(size, -1, dtype=np.int32)
+
+    # Step 1: Copy the crossover segment from parent1
+    offspring[cx1:cx2] = parent1[cx1:cx2]
+
+    # Create mapping for faster lookups
+    pos_map = np.full(size, -1, dtype=np.int32)
+    for i in range(size):
+        pos_map[parent2[i]] = i
+
+    # Step 2 & 3: Handle the crossover segment mapping
+    for i in range(cx1, cx2):
+        elem = parent2[i]
+        if elem not in offspring[cx1:cx2]:
+            pos = i
+            while True:
+                # Find what element was copied from parent1 at this position
+                j = parent1[pos]
+                # Find where j is in parent2
+                pos = pos_map[j]
+                # If that position is outside the crossover segment, place elem there
+                if pos < cx1 or pos >= cx2:
+                    offspring[pos] = elem
+                    break
+
+    # Step 4: Fill remaining positions from parent2
+    for i in range(size):
+        if offspring[i] == -1:
+            offspring[i] = parent2[i]
+
+    return offspring
+
+
+@njit(cache=True)
 def _construct_offspring(
     edge_map: np.ndarray, edge_counts: np.ndarray, n: int, rng_state: np.ndarray
 ) -> np.ndarray:
@@ -361,6 +406,8 @@ class r0123456:
                         child = _edge_recombination(
                             pop[p1_idx], pop[p2_idx], self.rng_state
                         )
+                    elif self.recombination_type == "pmx":
+                        child = _pmx_crossover(pop[p1_idx], pop[p2_idx], self.rng_state)
                     else:
                         child = pop[p1_idx].copy()
 
