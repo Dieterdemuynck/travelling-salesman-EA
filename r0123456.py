@@ -159,12 +159,98 @@ def _tournament_select_one(
 
 
 @njit(cache=True)
+def _construct_offspring(
+    edge_map: np.ndarray,
+    edge_counts: np.ndarray,
+    n: int,
+    rng_state: np.ndarray,
+    distanceMatrix: np.ndarray,
+) -> np.ndarray:
+    """Separate offspring construction for better optimization;
+    ensures that chosen edges are valid (finite in distanceMatrix) when possible."""
+    offspring = np.empty(n, dtype=np.int32)
+    used = np.zeros(n, dtype=np.bool_)
+
+    # Start with random city
+    current = int(np.random.random() * n)
+
+    for pos in range(n):
+        offspring[pos] = current
+        used[current] = True
+
+        if pos < n - 1:
+            # Find next city more efficiently
+            neighbors = edge_map[current, : edge_counts[current]]
+            # Prefer neighbors with fewest edges AND valid distance
+            min_edges = n + 1
+            next_city = -1
+
+            for idx in range(len(neighbors)):
+                neighbor = neighbors[idx]
+                if neighbor < 0:
+                    continue
+                if not used[neighbor] and np.isfinite(
+                    distanceMatrix[current, neighbor]
+                ):
+                    count = edge_counts[neighbor]
+                    if count < min_edges:
+                        min_edges = count
+                        next_city = neighbor
+
+            if next_city != -1:
+                current = next_city
+                continue
+
+            # If no valid neighbor found, try neighbors even if distance invalid (fallback)
+            for idx in range(len(neighbors)):
+                neighbor = neighbors[idx]
+                if neighbor < 0:
+                    continue
+                if not used[neighbor]:
+                    current = neighbor
+                    break
+            else:
+                # No neighbor usable: pick random unused city that yields a valid edge if possible
+                unused_count = n - pos - 1
+                if unused_count > 0:
+                    target = int(np.random.random() * unused_count)
+                    count = 0
+                    found = False
+                    for i in range(n):
+                        if not used[i] and np.isfinite(distanceMatrix[current, i]):
+                            if count == target:
+                                current = i
+                                found = True
+                                break
+                            count += 1
+                    if not found:
+                        # fallback: choose any unused
+                        count = 0
+                        for i in range(n):
+                            if not used[i]:
+                                if count == target:
+                                    current = i
+                                    break
+                                count += 1
+
+    # As a final safety, repair local invalid edges if any (fast, in-place)
+    if not _is_valid_path(offspring, distanceMatrix):
+        offspring = _repair_path(offspring, distanceMatrix)
+    return offspring
+
+
+@njit(cache=True)
 def _edge_recombination(
-    parent1: np.ndarray, parent2: np.ndarray, rng_state: np.ndarray
+    parent1: np.ndarray,
+    parent2: np.ndarray,
+    rng_state: np.ndarray,
+    distanceMatrix: np.ndarray,
 ) -> np.ndarray:
     n = len(parent1)
     # Use fixed-size arrays for better performance
-    edge_map = np.zeros((n, 4), dtype=np.int32)  # Maximum 4 edges per city
+    edge_map = np.full(
+        (n, 4), -1, dtype=np.int32
+    )  # Maximum 4 edges per city; init with -1 sentinel
     edge_counts = np.zeros(n, dtype=np.int32)
 
     # Pre-compute parent indices for faster lookup
@@ -205,14 +291,18 @@ def _edge_recombination(
             edge_map[curr, edge_counts[curr]] = next
             edge_counts[curr] += 1
 
-    return _construct_offspring(edge_map, edge_counts, n, rng_state)
+    # Construct offspring while preferring valid edges
+    offspring = _construct_offspring(
+        edge_map, edge_counts, n, rng_state, distanceMatrix
+    )
+    return offspring
 
 
 @njit(cache=True)
 def _repair_path(path: np.ndarray, distanceMatrix: np.ndarray) -> np.ndarray:
     """Repair an invalid path by swapping cities until it becomes valid. Modifies path in-place."""
     n = len(path)
-    
+
     # For each position, if the connection to next city is invalid,
     # find a valid swap partner
     for i in range(n):
@@ -225,7 +315,7 @@ def _repair_path(path: np.ndarray, distanceMatrix: np.ndarray) -> np.ndarray:
                 # Check if swapping would create valid connections
                 prev_i = (i - 1) % n
                 next_j = (j + 1) % n
-                
+
                 # Test if swap would be valid
                 if (
                     np.isfinite(distanceMatrix[path[prev_i], path[j]])
@@ -238,6 +328,7 @@ def _repair_path(path: np.ndarray, distanceMatrix: np.ndarray) -> np.ndarray:
                     break
     return path
 
+
 @njit(cache=True)
 def _contains(arr: np.ndarray, val: int) -> bool:
     """Fast check for value in small array"""
@@ -248,13 +339,24 @@ def _contains(arr: np.ndarray, val: int) -> bool:
 
 
 @njit(cache=True)
+def _array_contains_range(arr: np.ndarray, start: int, end: int, val: int) -> bool:
+    """Check if val exists in arr[start:end] (end exclusive). Works with Numba."""
+    for i in range(start, end):
+        if arr[i] == val:
+            return True
+    return False
+
+
+@njit(cache=True)
 def _pmx_crossover(
     parent1: np.ndarray,
     parent2: np.ndarray,
     rng_state: np.ndarray,
+    distanceMatrix: np.ndarray,
     exploitation_rate: float = -1.0,
 ) -> np.ndarray:
-    """Partially Mapped Crossover (PMX) with Numba optimization and exploitation rate control"""
+    """Partially Mapped Crossover (PMX) with Numba optimization and exploitation rate control.
+    Ensures that the returned offspring is a valid path (repairs locally if needed)."""
     size = len(parent1)
 
     # Step 1: Choose crossover points based on exploitation_rate
@@ -264,7 +366,10 @@ def _pmx_crossover(
         cx2 = cx1 + 1 + int(np.random.random() * (size - cx1 - 1))
     else:
         # Clamp exploitation_rate between 0 and 1
-        exploitation_rate = max(0.0, min(1.0, exploitation_rate))
+        if exploitation_rate < 0.0:
+            exploitation_rate = 0.0
+        if exploitation_rate > 1.0:
+            exploitation_rate = 1.0
         # Calculate segment length based on exploitation rate
         segment_length = int((1 - exploitation_rate) * (size - 1)) + 1
         cx1 = int(np.random.random() * (size - segment_length))
@@ -274,7 +379,8 @@ def _pmx_crossover(
     offspring = np.full(size, -1, dtype=np.int32)
 
     # Step 2: Copy the crossover segment from parent1
-    offspring[cx1:cx2] = parent1[cx1:cx2]
+    for i in range(cx1, cx2):
+        offspring[i] = parent1[i]
 
     # Create mapping for faster lookups
     pos_map = np.full(size, -1, dtype=np.int32)
@@ -284,7 +390,7 @@ def _pmx_crossover(
     # Step 3: Handle the crossover segment mapping
     for i in range(cx1, cx2):
         elem = parent2[i]
-        if elem not in offspring[cx1:cx2]:
+        if not _array_contains_range(offspring, cx1, cx2, elem):
             pos = i
             while True:
                 # Find what element was copied from parent1 at this position
@@ -301,54 +407,9 @@ def _pmx_crossover(
         if offspring[i] == -1:
             offspring[i] = parent2[i]
 
-    return offspring
-
-
-@njit(cache=True)
-def _construct_offspring(
-    edge_map: np.ndarray, edge_counts: np.ndarray, n: int, rng_state: np.ndarray
-) -> np.ndarray:
-    """Separate offspring construction for better optimization"""
-    offspring = np.empty(n, dtype=np.int32)
-    used = np.zeros(n, dtype=np.bool_)
-
-    # Start with random city
-    current = int(np.random.random() * n)
-
-    for pos in range(n):
-        offspring[pos] = current
-        used[current] = True
-
-        if pos < n - 1:
-            # Find next city more efficiently
-            neighbors = edge_map[current, : edge_counts[current]]
-            if len(neighbors) > 0:
-                min_edges = n + 1
-                next_city = -1
-
-                for neighbor in neighbors:
-                    if not used[neighbor]:
-                        count = edge_counts[neighbor]
-                        if count < min_edges:
-                            min_edges = count
-                            next_city = neighbor
-
-                if next_city != -1:
-                    current = next_city
-                    continue
-
-            # No valid neighbors, pick random unused city
-            unused_count = n - pos - 1
-            if unused_count > 0:
-                target = int(np.random.random() * unused_count)
-                count = 0
-                for i in range(n):
-                    if not used[i]:
-                        if count == target:
-                            current = i
-                            break
-                        count += 1
-
+    # Final safety: prefer local repair if any invalid edges remain
+    if not _is_valid_path(offspring, distanceMatrix):
+        offspring = _repair_path(offspring, distanceMatrix)
     return offspring
 
 
@@ -449,19 +510,17 @@ class r0123456:
                 for j in range(batch_size):
                     p1_idx, p2_idx = parent_pairs[i + j - 1]
 
-                    # Recombination (using parent indices)
+                    # Recombination (using parent indices); recombinators now ensure validity themselves
                     if self.recombination_type == "edge":
                         child = _edge_recombination(
-                            pop[p1_idx], pop[p2_idx], self.rng_state
+                            pop[p1_idx], pop[p2_idx], self.rng_state, distanceMatrix
                         )
                     elif self.recombination_type == "pmx":
-                        child = _pmx_crossover(pop[p1_idx], pop[p2_idx], self.rng_state)
+                        child = _pmx_crossover(
+                            pop[p1_idx], pop[p2_idx], self.rng_state, distanceMatrix
+                        )
                     else:
                         child = pop[p1_idx].copy()
-                    
-                    # Repair invalid paths after crossover
-                    if not _is_valid_path(child, distanceMatrix):
-                        child = _repair_path(child, distanceMatrix)
 
                     # Mutation (in-place when possible)
                     if np.random.random() < self.mutation_rate:
@@ -473,9 +532,6 @@ class r0123456:
                             child = _inversion_mutation(
                                 child, distanceMatrix, self.rng_state
                             )
-                        # Repair if mutation created an invalid path
-                        if not _is_valid_path(child, distanceMatrix):
-                            child = _repair_path(child, distanceMatrix)
 
                     new_pop[i + j] = child
 
